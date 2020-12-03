@@ -26,9 +26,9 @@ function SocketIoEngine(script) {
   this.httpDelegate = new EngineHttp(script);
 }
 
-SocketIoEngine.prototype.createScenario = function(scenarioSpec, ee) {
+SocketIoEngine.prototype.createScenario = function (scenarioSpec, ee) {
   var self = this;
-  let tasks = _.map(scenarioSpec.flow, function(rs) {
+  let tasks = _.map(scenarioSpec.flow, function (rs) {
     if (rs.think) {
       return engineUtil.createThink(rs, _.get(self.config, 'defaults.think', {}));
     }
@@ -41,7 +41,7 @@ SocketIoEngine.prototype.createScenario = function(scenarioSpec, ee) {
 function markEndTime(ee, context, startedAt) {
   let endedAt = process.hrtime(startedAt);
   let delta = (endedAt[0] * 1e9) + endedAt[1];
-  ee.emit('histogram', 'engine.socketio.response_time', delta/1e6);
+  ee.emit('histogram', 'engine.socketio.response_time', delta / 1e6);
 }
 
 function isResponseRequired(spec) {
@@ -49,7 +49,7 @@ function isResponseRequired(spec) {
 }
 
 function isAcknowledgeRequired(spec) {
-    return (spec.emit && spec.emit.acknowledge);
+  return (spec.emit && spec.emit.acknowledge);
 }
 
 function processResponse(ee, data, response, context, callback) {
@@ -70,10 +70,10 @@ function processResponse(ee, data, response, context, callback) {
   }
 
   // Construct the (HTTP) response...
-  let fauxResponse = {body: JSON.stringify(data)};
+  let fauxResponse = { body: JSON.stringify(data) };
 
   // Handle the capture or match clauses...
-  engineUtil.captureOrMatch(response, fauxResponse, context, function(err, result) {
+  engineUtil.captureOrMatch(response, fauxResponse, context, function (err, result) {
     // Were we unable to invoke captureOrMatch?
     if (err) {
       debug(data);
@@ -104,7 +104,7 @@ function processResponse(ee, data, response, context, callback) {
         // });
 
         // Populate the context with captured values
-        _.each(result.captures, function(v, k) {
+        _.each(result.captures, function (v, k) {
           context.vars[k] = v.value;
         });
       }
@@ -125,7 +125,7 @@ SocketIoEngine.prototype.step = function (requestSpec, ee) {
   let self = this;
 
   if (requestSpec.loop) {
-    let steps = _.map(requestSpec.loop, function(rs) {
+    let steps = _.map(requestSpec.loop, function (rs) {
       if (!rs.emit && !rs.loop) {
         return self.httpDelegate.step(rs, ee);
       }
@@ -145,7 +145,7 @@ SocketIoEngine.prototype.step = function (requestSpec, ee) {
     );
   }
 
-  let f = function(context, callback) {
+  let f = function (context, callback) {
     // Only process emit requests; delegate the rest to the HTTP engine (or think utility)
     if (requestSpec.think) {
       return engineUtil.createThink(requestSpec, _.get(self.config, 'defaults.think', {}));
@@ -200,14 +200,16 @@ SocketIoEngine.prototype.step = function (requestSpec, ee) {
 
         // Acknowledge required so add callback to emit
         if (needEmit) {
-          socketio.emit(outgoing.channel, outgoing.data, ackCallback);
+          const splitData = outgoing.data.split('|');
+          socketio.emit(outgoing.channel, ...splitData, ackCallback);
         } else {
           ackCallback();
         }
       } else {
         // No acknowledge data is expected, so emit without a listener
         if (needEmit) {
-          socketio.emit(outgoing.channel, outgoing.data);
+          const splitData = outgoing.data.split('|');
+          socketio.emit(outgoing.channel, ...splitData);
         }
         markEndTime(ee, context, startedAt);
         return callback(null, context);
@@ -225,7 +227,7 @@ SocketIoEngine.prototype.step = function (requestSpec, ee) {
       let done = false;
       socketio.on(response.channel, function receive(data) {
         done = true;
-        processResponse(ee, data, response, context, function(err) {
+        processResponse(ee, data, response, context, function (err) {
           if (!err) {
             markEndTime(ee, context, startedAt);
           }
@@ -235,7 +237,8 @@ SocketIoEngine.prototype.step = function (requestSpec, ee) {
         });
       });
       // Send the data on the specified socket.io channel
-      socketio.emit(outgoing.channel, outgoing.data);
+      const splitData = outgoing.data.split('|');
+      socketio.emit(outgoing.channel, ...splitData);
       // If we don't get a response within the timeout, fire an error
       let waitTime = self.config.timeout || 10;
       waitTime *= 1000;
@@ -251,12 +254,12 @@ SocketIoEngine.prototype.step = function (requestSpec, ee) {
     }
   };
 
-  function preStep(context, callback){
+  function preStep(context, callback) {
     // Set default namespace in emit action
     requestSpec.emit.namespace = template(requestSpec.emit.namespace, context) || "";
 
-    self.loadContextSocket(requestSpec.emit.namespace, context, function(err, socket) {
-      if(err) {
+    self.loadContextSocket(requestSpec.emit.namespace, context, function (err, socket) {
+      if (err) {
         debug(err);
         ee.emit('error', err.message);
         return callback(err, context);
@@ -266,17 +269,17 @@ SocketIoEngine.prototype.step = function (requestSpec, ee) {
     });
   }
 
-  if(requestSpec.emit) {
+  if (requestSpec.emit) {
     return preStep;
   } else {
     return f;
   }
 };
 
-SocketIoEngine.prototype.loadContextSocket = function(namespace, context, cb) {
+SocketIoEngine.prototype.loadContextSocket = function (namespace, context, cb) {
   context.sockets = context.sockets || {};
 
-  if(!context.sockets[namespace]) {
+  if (!context.sockets[namespace]) {
     let target = this.config.target + namespace;
     let tls = this.config.tls || {};
 
@@ -295,10 +298,10 @@ SocketIoEngine.prototype.loadContextSocket = function(namespace, context, cb) {
       context.__receivedMessageCount++;
     });
 
-    socket.once('connect', function() {
+    socket.once('connect', function () {
       cb(null, socket);
     });
-    socket.once('connect_error', function(err) {
+    socket.once('connect_error', function (err) {
       cb(err, null);
     });
   } else {
@@ -310,9 +313,9 @@ SocketIoEngine.prototype.closeContextSockets = function (context) {
   // if(context.socketio) {
   //   context.socketio.disconnect();
   // }
-  if(context.sockets && Object.keys(context.sockets).length > 0) {
+  if (context.sockets && Object.keys(context.sockets).length > 0) {
     var namespaces = Object.keys(context.sockets);
-    namespaces.forEach(function(namespace){
+    namespaces.forEach(function (namespace) {
       context.sockets[namespace].disconnect();
     });
   }
@@ -340,9 +343,9 @@ SocketIoEngine.prototype.compile = function (tasks, scenarioSpec, ee) {
     initialContext = self.httpDelegate.setInitialContext(initialContext);
 
     initialContext._pendingRequests = _.size(
-        _.reject(scenarioSpec, function(rs) {
-          return (typeof rs.think === 'number');
-        }));
+      _.reject(scenarioSpec, function (rs) {
+        return (typeof rs.think === 'number');
+      }));
 
     let steps = _.flatten([
       function z(cb) {
@@ -352,15 +355,15 @@ SocketIoEngine.prototype.compile = function (tasks, scenarioSpec, ee) {
     ]);
 
     async.waterfall(
-        steps,
-        function scenarioWaterfallCb(err, context) {
-          if (err) {
-            debug(err);
-          }
-          if (context) {
-            self.closeContextSockets(context);
-          }
-          return callback(err, context);
-        });
+      steps,
+      function scenarioWaterfallCb(err, context) {
+        if (err) {
+          debug(err);
+        }
+        if (context) {
+          self.closeContextSockets(context);
+        }
+        return callback(err, context);
+      });
   };
 };
